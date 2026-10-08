@@ -1,0 +1,16 @@
+# Supabase
+supabase/.temp/
+supabase/.branches/
+.env
+.env.*
+!.env.example
+
+# n8n
+n8n/.n8n/
+n8n/data/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
