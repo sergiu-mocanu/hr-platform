@@ -1,0 +1,387 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Demandes RH — NovaCorp</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>📋</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #16202e;
+    --ink-soft: #5a6876;
+    --paper: #f7f5f1;
+    --surface: #ffffff;
+    --line: #dcd7cf;
+    --accent: #2f5d8a;
+    --danger: #a4332c;
+    --st-pending: #b8791f;
+    --st-approved: #2f7a4f;
+    --st-rejected: #a4332c;
+    --st-cancelled: #8b8b8b;
+    --radius: 3px;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    padding: 0 1.5rem;
+    background: var(--paper);
+    color: var(--ink);
+    font: 400 16px/1.55 "IBM Plex Sans", system-ui, sans-serif;
+  }
+
+  main { max-width: 44rem; margin: 0 auto; padding: 3rem 0 5rem; }
+
+  h1 { font-size: 1.5rem; font-weight: 600; letter-spacing: -0.01em; margin: 0 0 0.25rem; }
+  h2 { font-size: 1.05rem; font-weight: 600; margin: 2.5rem 0 1rem; }
+
+  .lede { color: var(--ink-soft); margin: 0 0 2rem; }
+
+  form { display: grid; gap: 1rem; }
+
+  label { display: grid; gap: 0.35rem; font-size: 0.9rem; font-weight: 500; }
+
+  input, select, textarea {
+    font: inherit;
+    padding: 0.55rem 0.65rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--surface);
+    color: inherit;
+    width: 100%;
+  }
+
+  textarea { resize: vertical; min-height: 4.5rem; }
+
+  input:focus-visible, select:focus-visible, textarea:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent);
+  }
+
+  button {
+    font: inherit; font-weight: 500;
+    padding: 0.55rem 1rem;
+    border: 1px solid var(--accent);
+    border-radius: var(--radius);
+    background: var(--accent); color: #fff;
+    cursor: pointer; justify-self: start;
+  }
+
+  button:disabled { opacity: 0.55; cursor: progress; }
+  button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+  button.quiet { background: none; color: var(--ink-soft); border-color: var(--line); }
+
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+
+  .error, .notice {
+    border-left: 3px solid var(--danger);
+    padding: 0.6rem 0.8rem; background: var(--surface);
+    color: var(--danger); font-size: 0.9rem;
+  }
+  .notice { border-left-color: var(--st-approved); color: var(--st-approved); }
+
+  .panel {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: var(--radius); padding: 1.1rem 1.3rem;
+  }
+
+  .balance { display: flex; gap: 2rem; flex-wrap: wrap; }
+  .balance div { display: grid; gap: 0.1rem; }
+  .balance span { color: var(--ink-soft); font-size: 0.85rem; }
+  .balance strong { font-size: 1.35rem; font-weight: 600; }
+
+  .requests { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.6rem; }
+
+  .request {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-left: 4px solid var(--status);
+    border-radius: var(--radius);
+    padding: 0.85rem 1.1rem;
+    display: grid; gap: 0.2rem;
+  }
+
+  .request header { display: flex; justify-content: space-between; gap: 1rem; align-items: baseline; }
+  .request h3 { margin: 0; font-size: 1rem; font-weight: 600; }
+  .request .state { color: var(--status); font-size: 0.85rem; font-weight: 500; white-space: nowrap; }
+  .request .meta { color: var(--ink-soft); font-size: 0.9rem; margin: 0; }
+
+  .empty { color: var(--ink-soft); font-style: italic; }
+
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+
+  <section id="view-login">
+    <h1>Demandes RH</h1>
+    <p class="lede">Connectez-vous avec votre adresse NovaCorp.</p>
+    <form id="login-form">
+      <label>Adresse e-mail
+        <input id="email" type="email" autocomplete="username" required>
+      </label>
+      <label>Mot de passe
+        <input id="password" type="password" autocomplete="current-password" required>
+      </label>
+      <p id="login-error" class="error" hidden></p>
+      <button id="login-submit" type="submit">Se connecter</button>
+    </form>
+  </section>
+
+  <section id="view-app" hidden>
+    <h1>Demandes RH</h1>
+    <p class="lede"><span id="me-name">—</span> · <span id="me-role">—</span></p>
+
+    <div class="panel balance" id="balance-panel" hidden>
+      <div><span>Acquis</span><strong id="bal-entitled">—</strong></div>
+      <div><span>Reportés</span><strong id="bal-carried">—</strong></div>
+      <div><span>Pris</span><strong id="bal-taken">—</strong></div>
+      <div><span>En attente</span><strong id="bal-pending">—</strong></div>
+      <div><span>Disponibles</span><strong id="bal-available">—</strong></div>
+    </div>
+
+    <h2>Nouvelle demande</h2>
+    <form id="request-form">
+      <label>Type de demande
+        <select id="type" required></select>
+      </label>
+
+      <div class="row" id="date-row">
+        <label>Début <input id="start-date" type="date"></label>
+        <label>Fin <input id="end-date" type="date"></label>
+      </div>
+
+      <label><span id="value-caption">Durée (jours)</span>
+        <input id="value" type="number" min="0.5" step="0.5" required>
+      </label>
+
+      <label>Motif
+        <textarea id="details" placeholder="Facultatif"></textarea>
+      </label>
+
+      <p id="form-error" class="error" hidden></p>
+      <p id="form-notice" class="notice" hidden></p>
+      <button id="request-submit" type="submit">Soumettre</button>
+    </form>
+
+    <h2>Mes demandes</h2>
+    <ul class="requests" id="request-list"></ul>
+
+    <h2>Session</h2>
+    <button id="logout" class="quiet" type="button">Se déconnecter</button>
+  </section>
+
+</main>
+
+<script src="config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const ROLE_LABELS = {
+  salarie: "Salarié", manager: "Manager",
+  rh: "Service RH", drh: "Direction des ressources humaines",
+};
+
+const STATUS = {
+  pending:   { label: "En attente", color: "var(--st-pending)" },
+  approved:  { label: "Approuvée",  color: "var(--st-approved)" },
+  rejected:  { label: "Refusée",    color: "var(--st-rejected)" },
+  cancelled: { label: "Annulée",    color: "var(--st-cancelled)" },
+};
+
+const el = (id) => document.getElementById(id);
+const db = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
+
+let session = null;
+let types = [];
+
+function showMessage(node, text) {
+  node.textContent = text;
+  node.hidden = !text;
+}
+
+const fmtDate = (iso) =>
+  iso ? new Date(iso).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" }) : "";
+
+/** User input is inserted as HTML below; escape it. */
+const esc = (value) =>
+  String(value ?? "").replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+/** The form adapts to request_types: dates and unit are configuration, not code. */
+function applyTypeConfig() {
+  const type = types.find((t) => t.code === el("type").value);
+  if (!type) return;
+
+  el("date-row").hidden = !type.requires_dates;
+  el("start-date").required = type.requires_dates;
+  el("end-date").required = type.requires_dates;
+
+  const isDays = type.value_unit === "days";
+  el("value-caption").textContent = isDays ? "Durée (jours)" : "Montant (€)";
+  el("value").step = isDays ? "0.5" : "1";
+}
+
+async function loadTypes() {
+  const { data, error } = await db
+    .from("request_types")
+    .select("code, label, value_unit, requires_dates")
+    .eq("is_active", true)
+    .order("label");
+
+  if (error) throw error;
+
+  types = data;
+  el("type").innerHTML = data
+    .map((t) => `<option value="${esc(t.code)}">${esc(t.label)}</option>`)
+    .join("");
+  applyTypeConfig();
+}
+
+async function loadBalance() {
+  const { data, error } = await db
+    .from("leave_balance_summary")
+    .select("*")
+    .eq("year", new Date().getFullYear())
+    .maybeSingle();
+
+  if (error) throw error;
+
+  el("balance-panel").hidden = !data;
+  if (!data) return;
+
+  el("bal-entitled").textContent  = data.entitled_days;
+  el("bal-carried").textContent   = data.carried_over_days;
+  el("bal-taken").textContent     = data.taken_days;
+  el("bal-pending").textContent   = data.pending_days;
+  el("bal-available").textContent = data.available_days;
+}
+
+async function loadRequests() {
+  // request_types is embedded through the foreign key on requests.request_type.
+  const { data, error } = await db
+    .from("requests")
+    .select(`
+      id, value, start_date, end_date, details, status,
+      current_step, approver_chain, submitted_at,
+      request_types ( label, value_unit )
+    `)
+    .eq("requester_id", session.user.id)
+    .order("submitted_at", { ascending: false });
+
+  if (error) throw error;
+
+  el("request-list").innerHTML = data.length
+    ? data.map(renderRequest).join("")
+    : '<li class="empty">Aucune demande pour le moment.</li>';
+}
+
+function renderRequest(r) {
+  const state = STATUS[r.status];
+  const unit = r.request_types.value_unit === "days" ? "jours" : "€";
+  const period = r.start_date ? `du ${fmtDate(r.start_date)} au ${fmtDate(r.end_date)}` : "";
+  const progress = r.status === "pending"
+    ? `étape ${r.current_step}/${r.approver_chain.length} — ${ROLE_LABELS[r.approver_chain[r.current_step - 1]]}`
+    : `soumise le ${fmtDate(r.submitted_at)}`;
+
+  return `
+    <li class="request" style="--status: ${state.color}">
+      <header>
+        <h3>${esc(r.request_types.label)} — ${esc(r.value)} ${unit}</h3>
+        <span class="state">${state.label}</span>
+      </header>
+      ${period ? `<p class="meta">${period}</p>` : ""}
+      <p class="meta">${progress}</p>
+      ${r.details ? `<p class="meta">${esc(r.details)}</p>` : ""}
+    </li>`;
+}
+
+async function submitRequest(event) {
+  event.preventDefault();
+  const button = el("request-submit");
+  button.disabled = true;
+  showMessage(el("form-error"), "");
+  showMessage(el("form-notice"), "");
+
+  const type = types.find((t) => t.code === el("type").value);
+
+  // requester_id is sent explicitly: the RLS insert policy compares it with
+  // auth.uid(), so filing on someone else's behalf is rejected server-side.
+  const { error } = await db.from("requests").insert({
+    requester_id: session.user.id,
+    request_type: type.code,
+    value: Number(el("value").value),
+    start_date: type.requires_dates ? el("start-date").value : null,
+    end_date: type.requires_dates ? el("end-date").value : null,
+    details: el("details").value.trim() || null,
+  });
+
+  button.disabled = false;
+
+  if (error) {
+    showMessage(el("form-error"), error.message);
+    return;
+  }
+
+  el("request-form").reset();
+  applyTypeConfig();
+  showMessage(el("form-notice"), "Demande envoyée. Le valideur a été notifié.");
+  await Promise.all([loadRequests(), loadBalance()]);
+}
+
+async function render(newSession) {
+  session = newSession;
+  const loggedIn = Boolean(session);
+  el("view-login").hidden = loggedIn;
+  el("view-app").hidden = !loggedIn;
+  if (!loggedIn) return;
+
+  try {
+    const { data: profile, error } = await db
+      .from("profiles").select("full_name, role")
+      .eq("id", session.user.id).single();
+    if (error) throw error;
+
+    el("me-name").textContent = profile.full_name;
+    el("me-role").textContent = ROLE_LABELS[profile.role] ?? profile.role;
+
+    await loadTypes();
+    await Promise.all([loadBalance(), loadRequests()]);
+  } catch (error) {
+    showMessage(el("form-error"), `Chargement impossible : ${error.message}`);
+  }
+}
+
+el("login-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  el("login-submit").disabled = true;
+  showMessage(el("login-error"), "");
+
+  const { error } = await db.auth.signInWithPassword({
+    email: el("email").value.trim(),
+    password: el("password").value,
+  });
+
+  el("login-submit").disabled = false;
+
+  if (error) {
+    showMessage(el("login-error"),
+      error.message === "Invalid login credentials"
+        ? "Adresse e-mail ou mot de passe incorrect."
+        : error.message);
+  } else {
+    el("password").value = "";
+  }
+});
+
+el("type").addEventListener("change", applyTypeConfig);
+el("request-form").addEventListener("submit", submitRequest);
+el("logout").addEventListener("click", () => db.auth.signOut());
+
+db.auth.onAuthStateChange((_event, newSession) => render(newSession));
+</script>
+</body>
+</html>
