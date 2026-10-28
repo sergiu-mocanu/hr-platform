@@ -76,6 +76,24 @@
 
   .row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
 
+  .date-field { display: grid; gap: 0.45rem; }
+  label.half {
+    display: flex; align-items: center; gap: 0.45rem;
+    font-weight: 400; font-size: 0.85rem; color: var(--ink-soft);
+  }
+  label.half input { width: auto; }
+
+  .preview {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-left: 4px solid var(--accent);
+    border-radius: var(--radius);
+    padding: 0.7rem 0.9rem;
+    font-size: 0.95rem;
+  }
+  .preview strong { font-weight: 600; }
+  .preview.invalid { border-left-color: var(--danger); color: var(--danger); }
+
   .error, .notice {
     border-left: 3px solid var(--danger);
     padding: 0.6rem 0.8rem; background: var(--surface);
@@ -88,10 +106,12 @@
     border-radius: var(--radius); padding: 1.1rem 1.3rem;
   }
 
-  .balance { display: flex; gap: 2rem; flex-wrap: wrap; }
-  .balance div { display: grid; gap: 0.1rem; }
-  .balance span { color: var(--ink-soft); font-size: 0.85rem; }
-  .balance strong { font-size: 1.35rem; font-weight: 600; }
+  .balance, .stats { display: flex; gap: 2rem; flex-wrap: wrap; }
+  .balance div, .stats div { display: grid; gap: 0.1rem; }
+  .balance span, .stats span { color: var(--ink-soft); font-size: 0.85rem; }
+  .balance strong, .stats strong { font-size: 1.35rem; font-weight: 600; }
+  .stats { margin-bottom: 1rem; }
+  .live { color: var(--st-approved); font-size: 0.8rem; font-weight: 500; }
 
   .requests { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.6rem; }
 
@@ -108,8 +128,49 @@
   .request h3 { margin: 0; font-size: 1rem; font-weight: 600; }
   .request .state { color: var(--status); font-size: 0.85rem; font-weight: 500; white-space: nowrap; }
   .request .meta { color: var(--ink-soft); font-size: 0.9rem; margin: 0; }
+  .request .motif {
+    font-size: 0.9rem; margin: 0.3rem 0 0;
+    padding-left: 0.7rem; border-left: 2px solid var(--line);
+  }
+  .request .motif .who { color: var(--ink-soft); }
+  .request .motif .text { font-style: italic; }
+  .request .decision { font-size: 0.9rem; margin: 0.15rem 0 0; }
+  .request .decision .who { font-weight: 500; color: var(--ink); }
+  .request .decision .comment { font-style: italic; }
+
+  .ai {
+    margin: 0.5rem 0 0; padding: 0.6rem 0.8rem;
+    background: var(--paper); border-radius: var(--radius);
+    font-size: 0.9rem;
+  }
+  .ai .verdict { font-weight: 600; }
+  .ai .verdict.ok { color: var(--st-approved); }
+  .ai .verdict.warning { color: var(--st-pending); }
+  .ai ul { margin: 0.35rem 0 0; padding-left: 1.1rem; }
+  .ai li.warning { color: var(--st-pending); }
+  .ai li.ok { color: var(--ink-soft); }
+
+  .actions { display: flex; gap: 0.5rem; margin-top: 0.5rem; }
+  .actions button { padding: 0.35rem 0.8rem; font-size: 0.9rem; }
+  .actions .refuse { background: none; color: var(--danger); border-color: var(--danger); }
 
   .empty { color: var(--ink-soft); font-style: italic; }
+
+  details > summary {
+    cursor: pointer; list-style: none;
+    font-size: 1.05rem; font-weight: 600;
+    margin: 2.5rem 0 1rem;
+    display: flex; align-items: center; gap: 0.5rem;
+  }
+  details > summary::-webkit-details-marker { display: none; }
+  details > summary::before {
+    content: "▸"; color: var(--ink-soft); font-size: 0.9em;
+    transition: transform 0.15s;
+  }
+  details[open] > summary::before { transform: rotate(90deg); }
+  details > summary .count {
+    font-weight: 400; font-size: 0.85rem; color: var(--ink-soft);
+  }
 
   [hidden] { display: none !important; }
 </style>
@@ -144,32 +205,66 @@
       <div><span>Disponibles</span><strong id="bal-available">—</strong></div>
     </div>
 
-    <h2>Nouvelle demande</h2>
-    <form id="request-form">
-      <label>Type de demande
-        <select id="type" required></select>
-      </label>
-
-      <div class="row" id="date-row">
-        <label>Début <input id="start-date" type="date"></label>
-        <label>Fin <input id="end-date" type="date"></label>
+    <details id="dashboard-section" open hidden>
+      <summary>Tableau de bord <span class="live">● temps réel</span></summary>
+      <div class="panel stats">
+        <div><span>En attente</span><strong id="stat-pending">—</strong></div>
+        <div><span>Approuvées</span><strong id="stat-approved">—</strong></div>
+        <div><span>Refusées</span><strong id="stat-rejected">—</strong></div>
+        <div><span>Délai médian</span><strong id="stat-lead">—</strong></div>
       </div>
+      <ul class="requests" id="dashboard-list"></ul>
+    </details>
 
-      <label><span id="value-caption">Durée (jours)</span>
-        <input id="value" type="number" min="0.5" step="0.5" required>
-      </label>
+    <details id="approvals-section" open hidden>
+      <summary>À valider <span class="count" id="approvals-count"></span></summary>
+      <p id="approvals-error" class="error" hidden></p>
+      <ul class="requests" id="approval-list"></ul>
+    </details>
 
-      <label>Motif
-        <textarea id="details" placeholder="Facultatif"></textarea>
-      </label>
+    <details id="decisions-section" hidden>
+      <summary>Mes validations <span class="count" id="decisions-count"></span></summary>
+      <ul class="requests" id="decision-list"></ul>
+    </details>
 
-      <p id="form-error" class="error" hidden></p>
-      <p id="form-notice" class="notice" hidden></p>
-      <button id="request-submit" type="submit">Soumettre</button>
-    </form>
+    <details open>
+      <summary>Nouvelle demande</summary>
+      <form id="request-form">
+        <label>Type de demande
+          <select id="type" required></select>
+        </label>
 
-    <h2>Mes demandes</h2>
-    <ul class="requests" id="request-list"></ul>
+        <div class="row" id="date-row">
+          <div class="date-field">
+            <label>Début <input id="start-date" type="date"></label>
+            <label class="half"><input id="starts-afternoon" type="checkbox"> commence l'après-midi</label>
+          </div>
+          <div class="date-field">
+            <label>Fin <input id="end-date" type="date"></label>
+            <label class="half"><input id="ends-morning" type="checkbox"> s'arrête le matin</label>
+          </div>
+        </div>
+
+        <p class="preview" id="preview" hidden></p>
+
+        <label id="amount-label">Montant (€)
+          <input id="amount" type="number" min="1" step="1">
+        </label>
+
+        <label>Motif
+          <textarea id="details" placeholder="Facultatif"></textarea>
+        </label>
+
+        <p id="form-error" class="error" hidden></p>
+        <p id="form-notice" class="notice" hidden></p>
+        <button id="request-submit" type="submit">Soumettre</button>
+      </form>
+    </details>
+
+    <details open>
+      <summary>Mes demandes <span class="count" id="requests-count"></span></summary>
+      <ul class="requests" id="request-list"></ul>
+    </details>
 
     <h2>Session</h2>
     <button id="logout" class="quiet" type="button">Se déconnecter</button>
@@ -192,11 +287,21 @@ const STATUS = {
   cancelled: { label: "Annulée",    color: "var(--st-cancelled)" },
 };
 
+const DECISION_LABELS = { approved: "approuvée", rejected: "refusée" };
+
+// Shared embed: every step of the chain with its decision and author.
+const APPROVALS_EMBED = `
+  approvals ( step, approver_role, decision, comment, decided_at,
+              approver:approver_id ( full_name ) )`;
+
 const el = (id) => document.getElementById(id);
 const db = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
 
 let session = null;
 let types = [];
+let previewDays = null;
+let myRole = null;
+let requestsChannel = null;
 
 function showMessage(node, text) {
   node.textContent = text;
@@ -206,23 +311,108 @@ function showMessage(node, text) {
 const fmtDate = (iso) =>
   iso ? new Date(iso).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" }) : "";
 
-/** User input is inserted as HTML below; escape it. */
+const fmtLong = (iso) =>
+  new Date(iso).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
+
 const esc = (value) =>
   String(value ?? "").replace(/[&<>"']/g, (c) =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-/** The form adapts to request_types: dates and unit are configuration, not code. */
+const selectedType = () => types.find((t) => t.code === el("type").value);
+
+/** Who the request is waiting on: a named manager, or a service. */
+function pendingWith(r) {
+  const role = r.approver_chain[r.current_step - 1];
+  if (role === "manager" && r.profiles?.manager?.full_name) {
+    return esc(r.profiles.manager.full_name);
+  }
+  return ROLE_LABELS[role] ?? role;
+}
+
+function renderDecisions(approvals) {
+  return (approvals ?? [])
+    .filter((a) => a.decision)
+    .sort((a, b) => a.step - b.step)
+    .map((a) => {
+      const who = a.approver?.full_name ?? ROLE_LABELS[a.approver_role];
+      const colour = a.decision === "approved" ? "var(--st-approved)" : "var(--st-rejected)";
+      return `<p class="decision" style="color:${colour}">
+        Étape ${a.step} — ${DECISION_LABELS[a.decision]} par
+        <span class="who">${esc(who)}</span> le ${fmtDate(a.decided_at)}
+        ${a.comment ? `<br><span class="comment">« ${esc(a.comment)} »</span>` : ""}
+      </p>`;
+    })
+    .join("");
+}
+
 function applyTypeConfig() {
-  const type = types.find((t) => t.code === el("type").value);
+  const type = selectedType();
   if (!type) return;
+
+  const byDays = type.value_unit === "days";
 
   el("date-row").hidden = !type.requires_dates;
   el("start-date").required = type.requires_dates;
   el("end-date").required = type.requires_dates;
 
-  const isDays = type.value_unit === "days";
-  el("value-caption").textContent = isDays ? "Durée (jours)" : "Montant (€)";
-  el("value").step = isDays ? "0.5" : "1";
+  document.querySelectorAll("label.half")
+    .forEach((node) => { node.hidden = !(byDays && type.requires_dates); });
+
+  el("amount-label").hidden = byDays;
+  el("amount").required = !byDays;
+
+  updatePreview();
+}
+
+/** The count comes from the same function the insert trigger uses. */
+async function updatePreview() {
+  const type = selectedType();
+  const start = el("start-date").value;
+  const end = el("end-date").value;
+  const preview = el("preview");
+
+  previewDays = null;
+
+  if (!type || type.value_unit !== "days" || !start || !end) {
+    preview.hidden = true;
+    return;
+  }
+
+  if (end < start) {
+    preview.className = "preview invalid";
+    preview.textContent = "La date de fin précède la date de début.";
+    preview.hidden = false;
+    return;
+  }
+
+  const { data, error } = await db.rpc("working_days", {
+    p_start: start,
+    p_end: end,
+    p_starts_afternoon: el("starts-afternoon").checked,
+    p_ends_morning: el("ends-morning").checked,
+  });
+
+  if (error) {
+    preview.className = "preview invalid";
+    preview.textContent = `Calcul impossible : ${error.message}`;
+    preview.hidden = false;
+    return;
+  }
+
+  previewDays = Number(data);
+
+  if (previewDays <= 0) {
+    preview.className = "preview invalid";
+    preview.textContent = "Cette période ne contient aucun jour ouvré.";
+  } else {
+    const plural = previewDays > 1 ? "s" : "";
+    preview.className = "preview";
+    preview.innerHTML =
+      `Du <strong>${esc(fmtLong(start))}</strong> au <strong>${esc(fmtLong(end))}</strong>` +
+      ` — <strong>${previewDays} jour${plural} ouvré${plural}</strong>` +
+      ` (week-ends et jours fériés déduits)`;
+  }
+  preview.hidden = false;
 }
 
 async function loadTypes() {
@@ -245,6 +435,7 @@ async function loadBalance() {
   const { data, error } = await db
     .from("leave_balance_summary")
     .select("*")
+    .eq("employee_id", session.user.id)
     .eq("year", new Date().getFullYear())
     .maybeSingle();
 
@@ -261,13 +452,15 @@ async function loadBalance() {
 }
 
 async function loadRequests() {
-  // request_types is embedded through the foreign key on requests.request_type.
   const { data, error } = await db
     .from("requests")
     .select(`
       id, value, start_date, end_date, details, status,
       current_step, approver_chain, submitted_at,
-      request_types ( label, value_unit )
+      starts_afternoon, ends_morning,
+      request_types ( label, value_unit ),
+      profiles ( full_name, manager:manager_id ( full_name ) ),
+      ${APPROVALS_EMBED}
     `)
     .eq("requester_id", session.user.id)
     .order("submitted_at", { ascending: false });
@@ -275,16 +468,24 @@ async function loadRequests() {
   if (error) throw error;
 
   el("request-list").innerHTML = data.length
-    ? data.map(renderRequest).join("")
+    ? data.map(renderMyRequest).join("")
     : '<li class="empty">Aucune demande pour le moment.</li>';
+
+    el("requests-count").textContent = data.length ? `(${data.length})` : "";
 }
 
-function renderRequest(r) {
+function renderMyRequest(r) {
   const state = STATUS[r.status];
   const unit = r.request_types.value_unit === "days" ? "jours" : "€";
-  const period = r.start_date ? `du ${fmtDate(r.start_date)} au ${fmtDate(r.end_date)}` : "";
+  const halves = [
+    r.starts_afternoon ? "début après-midi" : null,
+    r.ends_morning ? "fin matinée" : null,
+  ].filter(Boolean).join(", ");
+  const period = r.start_date
+    ? `du ${fmtDate(r.start_date)} au ${fmtDate(r.end_date)}${halves ? ` (${halves})` : ""}`
+    : "";
   const progress = r.status === "pending"
-    ? `étape ${r.current_step}/${r.approver_chain.length} — ${ROLE_LABELS[r.approver_chain[r.current_step - 1]]}`
+    ? `étape ${r.current_step}/${r.approver_chain.length} — en attente de ${pendingWith(r)}`
     : `soumise le ${fmtDate(r.submitted_at)}`;
 
   return `
@@ -296,26 +497,253 @@ function renderRequest(r) {
       ${period ? `<p class="meta">${period}</p>` : ""}
       <p class="meta">${progress}</p>
       ${r.details ? `<p class="meta">${esc(r.details)}</p>` : ""}
+      ${renderDecisions(r.approvals)}
     </li>`;
+}
+
+async function loadApprovals() {
+  const section = el("approvals-section");
+
+  if (!myRole || myRole === "salarie") {
+    section.hidden = true;
+    return;
+  }
+
+  const { data, error } = await db
+    .from("requests")
+    .select(`
+      id, requester_id, value, start_date, end_date, details,
+      current_step, approver_chain, submitted_at,
+      request_types ( label, value_unit ),
+      profiles ( full_name, department, manager:manager_id ( full_name ) ),
+      ai_checks ( verdict, summary, findings, checked_at ),
+      ${APPROVALS_EMBED}
+    `)
+    .eq("status", "pending")
+    .order("submitted_at");
+
+  if (error) throw error;
+
+  const mine = data.filter(
+    (r) => r.approver_chain[r.current_step - 1] === myRole
+        && r.requester_id !== session.user.id
+  );
+
+  section.hidden = false;
+  el("approval-list").innerHTML = mine.length
+    ? mine.map(renderApproval).join("")
+    : '<li class="empty">Rien à valider.</li>';
+
+  el("approvals-count").textContent = mine.length ? `(${mine.length})` : "";
+}
+
+/** Most recent check for a request; the table keeps every attempt. */
+function renderAiCheck(checks) {
+  if (!checks?.length) return "";
+
+  const check = [...checks].sort(
+    (a, b) => new Date(b.checked_at) - new Date(a.checked_at))[0];
+
+  const label = check.verdict === "ok" ? "Aucun point d'attention" : "Points d'attention";
+
+  const items = (check.findings ?? [])
+    .map((f) => `<li class="${f.status}">${esc(f.detail)}</li>`)
+    .join("");
+
+  return `
+    <div class="ai">
+      <span class="verdict ${check.verdict}">Analyse automatique — ${label}</span>
+      <p style="margin:0.3rem 0 0">${esc(check.summary)}</p>
+      ${items ? `<ul>${items}</ul>` : ""}
+    </div>`;
+}
+
+function renderApproval(r) {
+  const unit = r.request_types.value_unit === "days" ? "jours" : "€";
+  const period = r.start_date ? `du ${fmtDate(r.start_date)} au ${fmtDate(r.end_date)}` : "";
+
+  return `
+    <li class="request" style="--status: var(--st-pending)">
+      <header>
+        <h3>${esc(r.profiles.full_name)} — ${esc(r.request_types.label)}, ${esc(r.value)} ${unit}</h3>
+        <span class="state">étape ${r.current_step}/${r.approver_chain.length}</span>
+      </header>
+      ${period ? `<p class="meta">${period}</p>` : ""}
+      ${r.details ? `<p class="motif">
+        <span class="who">Motif :</span>
+        <span class="text">« ${esc(r.details)} »</span></p>` : ""}
+      ${renderAiCheck(r.ai_checks)}
+      ${renderDecisions(r.approvals)}
+      <div class="actions">
+        <button type="button" data-decision="approved" data-id="${r.id}">Approuver</button>
+        <button type="button" class="refuse" data-decision="rejected" data-id="${r.id}">Refuser</button>
+      </div>
+    </li>`;
+}
+
+/** Requests this user has already decided — their own validation history. */
+async function loadDecisions() {
+  const section = el("decisions-section");
+
+  if (!myRole || myRole === "salarie") {
+    section.hidden = true;
+    return;
+  }
+
+  const { data, error } = await db
+    .from("approvals")
+    .select(`
+      step, decision, comment, decided_at,
+      requests ( value, status, start_date, end_date, approver_chain, current_step,
+                 request_types ( label, value_unit ),
+                 profiles ( full_name ) )
+    `)
+    .eq("approver_id", session.user.id)
+    .not("decision", "is", null)
+    .order("decided_at", { ascending: false })
+    .limit(25);
+
+  if (error) throw error;
+
+  section.hidden = false;
+  el("decision-list").innerHTML = data.length
+    ? data.map(renderDecisionRow).join("")
+    : '<li class="empty">Aucune validation pour le moment.</li>';
+
+  el("decisions-count").textContent = data.length ? `(${data.length})` : "";
+
+}
+
+function renderDecisionRow(a) {
+  const r = a.requests;
+  const state = STATUS[r.status];
+  const unit = r.request_types.value_unit === "days" ? "jours" : "€";
+  const period = r.start_date ? `du ${fmtDate(r.start_date)} au ${fmtDate(r.end_date)}` : "";
+  const outcome = r.status === "pending"
+    ? `transmise à ${ROLE_LABELS[r.approver_chain[r.current_step - 1]]}`
+    : `issue finale : ${state.label.toLowerCase()}`;
+
+  return `
+    <li class="request" style="--status: ${a.decision === "approved" ? "var(--st-approved)" : "var(--st-rejected)"}">
+      <header>
+        <h3>${esc(r.profiles.full_name)} — ${esc(r.request_types.label)}, ${esc(r.value)} ${unit}</h3>
+        <span class="state">${DECISION_LABELS[a.decision]}</span>
+      </header>
+      ${period ? `<p class="meta">${period}</p>` : ""}
+      <p class="meta">Étape ${a.step}, le ${fmtDate(a.decided_at)} · ${outcome}</p>
+      ${a.comment ? `<p class="decision"><span class="comment">« ${esc(a.comment)} »</span></p>` : ""}
+    </li>`;
+}
+
+async function loadDashboard() {
+  const section = el("dashboard-section");
+
+  if (myRole !== "rh" && myRole !== "drh") {
+    section.hidden = true;
+    return;
+  }
+  section.hidden = false;
+
+  const { data, error } = await db
+    .from("requests")
+    .select(`
+      id, value, status, start_date, end_date, details, current_step, approver_chain,
+      submitted_at, decided_at,
+      request_types ( label, value_unit ),
+      profiles ( full_name, department, manager:manager_id ( full_name ) ),
+      ${APPROVALS_EMBED}
+    `)
+    .order("submitted_at", { ascending: false })
+    .limit(50);
+
+  if (error) throw error;
+
+  const count = (s) => data.filter((r) => r.status === s).length;
+  el("stat-pending").textContent  = count("pending");
+  el("stat-approved").textContent = count("approved");
+  el("stat-rejected").textContent = count("rejected");
+
+  const leadTimes = data
+    .filter((r) => r.decided_at)
+    .map((r) => (new Date(r.decided_at) - new Date(r.submitted_at)) / 86400000)
+    .sort((a, b) => a - b);
+
+  el("stat-lead").textContent = leadTimes.length
+    ? `${leadTimes[Math.floor(leadTimes.length / 2)].toFixed(1)} j`
+    : "—";
+
+  el("dashboard-list").innerHTML = data.length
+    ? data.map(renderDashboardRow).join("")
+    : '<li class="empty">Aucune demande.</li>';
+}
+
+function renderDashboardRow(r) {
+  const state = STATUS[r.status];
+  const unit = r.request_types.value_unit === "days" ? "jours" : "€";
+  const where = r.status === "pending"
+    ? `étape ${r.current_step}/${r.approver_chain.length} — en attente de ${pendingWith(r)}`
+    : `décidée le ${fmtDate(r.decided_at)}`;
+
+  return `
+    <li class="request" style="--status: ${state.color}">
+      <header>
+        <h3>${esc(r.profiles.full_name)} — ${esc(r.request_types.label)}, ${esc(r.value)} ${unit}</h3>
+        <span class="state">${state.label}</span>
+      </header>
+      <p class="meta">${esc(r.profiles.department ?? "")} · ${where}</p>
+      ${r.details ? `<p class="motif">
+        <span class="who">Motif :</span>
+        <span class="text">« ${esc(r.details)} »</span></p>` : ""}
+      ${renderDecisions(r.approvals)}
+    </li>`;
+}
+
+async function decide(requestId, decision) {
+  const comment = window.prompt(
+    decision === "approved" ? "Commentaire (facultatif)" : "Motif du refus"
+  );
+  if (comment === null) return;
+
+  showMessage(el("approvals-error"), "");
+
+  const { error } = await db.rpc("record_approval", {
+    p_request_id: requestId,
+    p_decision: decision,
+    p_comment: comment.trim() || null,
+  });
+
+  if (error) {
+    showMessage(el("approvals-error"), error.message);
+    return;
+  }
+
+  await refreshAll();
 }
 
 async function submitRequest(event) {
   event.preventDefault();
+  const type = selectedType();
+  const byDays = type.value_unit === "days";
+
+  if (byDays && !(previewDays > 0)) {
+    showMessage(el("form-error"), "Sélectionnez une période contenant au moins un jour ouvré.");
+    return;
+  }
+
   const button = el("request-submit");
   button.disabled = true;
   showMessage(el("form-error"), "");
   showMessage(el("form-notice"), "");
 
-  const type = types.find((t) => t.code === el("type").value);
-
-  // requester_id is sent explicitly: the RLS insert policy compares it with
-  // auth.uid(), so filing on someone else's behalf is rejected server-side.
+  // value is omitted for day-based types: the insert trigger computes it.
   const { error } = await db.from("requests").insert({
     requester_id: session.user.id,
     request_type: type.code,
-    value: Number(el("value").value),
+    value: byDays ? null : Number(el("amount").value),
     start_date: type.requires_dates ? el("start-date").value : null,
     end_date: type.requires_dates ? el("end-date").value : null,
+    starts_afternoon: byDays ? el("starts-afternoon").checked : false,
+    ends_morning: byDays ? el("ends-morning").checked : false,
     details: el("details").value.trim() || null,
   });
 
@@ -329,7 +757,23 @@ async function submitRequest(event) {
   el("request-form").reset();
   applyTypeConfig();
   showMessage(el("form-notice"), "Demande envoyée. Le valideur a été notifié.");
-  await Promise.all([loadRequests(), loadBalance()]);
+  await refreshAll();
+}
+
+async function refreshAll() {
+  await Promise.all([
+    loadBalance(), loadRequests(), loadApprovals(), loadDecisions(), loadDashboard(),
+  ]);
+}
+
+/** Realtime respects RLS: a manager only receives their own team's rows. */
+function subscribeToRequests() {
+  if (requestsChannel) return;
+
+  requestsChannel = db.channel("requests-feed")
+    .on("postgres_changes", { event: "*", schema: "public", table: "requests" },
+        () => { refreshAll(); })
+    .subscribe();
 }
 
 async function render(newSession) {
@@ -345,11 +789,13 @@ async function render(newSession) {
       .eq("id", session.user.id).single();
     if (error) throw error;
 
+    myRole = profile.role;
     el("me-name").textContent = profile.full_name;
     el("me-role").textContent = ROLE_LABELS[profile.role] ?? profile.role;
 
     await loadTypes();
-    await Promise.all([loadBalance(), loadRequests()]);
+    await refreshAll();
+    subscribeToRequests();
   } catch (error) {
     showMessage(el("form-error"), `Chargement impossible : ${error.message}`);
   }
@@ -378,8 +824,22 @@ el("login-form").addEventListener("submit", async (event) => {
 });
 
 el("type").addEventListener("change", applyTypeConfig);
+["start-date", "end-date", "starts-afternoon", "ends-morning"]
+  .forEach((id) => el(id).addEventListener("change", updatePreview));
 el("request-form").addEventListener("submit", submitRequest);
-el("logout").addEventListener("click", () => db.auth.signOut());
+
+el("approval-list").addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-decision]");
+  if (button) decide(button.dataset.id, button.dataset.decision);
+});
+
+el("logout").addEventListener("click", async () => {
+  if (requestsChannel) {
+    await db.removeChannel(requestsChannel);
+    requestsChannel = null;
+  }
+  db.auth.signOut();
+});
 
 db.auth.onAuthStateChange((_event, newSession) => render(newSession));
 </script>

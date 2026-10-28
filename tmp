@@ -1,0 +1,9 @@
+{
+  "request_id": "{{ $('Webhook').first().json.body.record.id }}",
+  "verdict": "{{ $('Run checks').first().json.verdict }}",
+  "summary": {{ JSON.stringify($json.choices[0].message.content) }},
+  "findings": {{ JSON.stringify($('Run checks').first().json.findings) }},
+  "model": "{{ $json.model }}",
+  "input_tokens": {{ $json.usage.prompt_tokens }},
+  "output_tokens": {{ $json.usage.completion_tokens }}
+}
